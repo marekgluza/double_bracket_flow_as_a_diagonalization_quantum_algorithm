@@ -10,13 +10,18 @@ from math import isclose as equal_floats
 class double_bracket_flow:
     def __init__( self, 
                     H, 
-                    flow_generator = { 'type' : 'default', 'operator' : None },
+                    ## MAGNETIC: added attribute 'field_vector' for B, operator be set as B.dot(Z)
+                    flow_generator = { 'type' : 'default', 'operator' : None , 'field_vector': None},
                     norm_type =  None,
                     flow_step_min = 0,
                     flow_step_max = 0.05,
                     nmb_search_points_minimizing_s_search = 100,
+                    magnetic_step_min = 0,
+                    magnetic_step_max = 1,
+                    nmb_search_points_magnetic_b_search = 5,
                     nmb_flow_steps = 1,
                     custom_flow_step_list = None,
+                    custom_magnetic_step_list = None,
                     please_use_binary_search = False, 
                     please_compute_flow_generator_norm = False,
                     please_store_prescribed_generators = False,
@@ -36,8 +41,13 @@ class double_bracket_flow:
         self.flow_step_max = flow_step_max
         self.nmb_search_points_minimizing_s_search = nmb_search_points_minimizing_s_search
 
+        self.magnetic_step_min = magnetic_step_min
+        self.magnetic_step_max = magnetic_step_max
+        self.nmb_search_points_magnetic_b_search = nmb_search_points_magnetic_b_search
+
         self.please_use_binary_search = please_use_binary_search
         self.custom_flow_step_list = custom_flow_step_list
+        self.custom_magnetic_step_list = custom_magnetic_step_list
         self.please_store_prescribed_flow_generators = please_store_prescribed_generators
 
         self.please_compute_flow_generator_norm = please_compute_flow_generator_norm
@@ -71,7 +81,10 @@ class double_bracket_flow:
             logging.basicConfig(
                 format="%(asctime)-15s [%(levelname)s] %(funcName)s: %(message)s",
                 level=logging.INFO)
-
+    @staticmethod
+    def normalized(A):
+        return A/np.linalg.norm(A)
+    
     @staticmethod
     def commutator( A, B ):
             return A.dot( B ) - B.dot( A )
@@ -85,7 +98,7 @@ class double_bracket_flow:
         return A - double_bracket_flow.delta( A )
 
     def choose_flow_generator( self, H = None ):
-
+        # Check if H has been passed, if not, use self.H
         if H is None:
             H = self.H
             if self.please_be_exhaustively_verbose is True:
@@ -94,11 +107,13 @@ class double_bracket_flow:
             if self.please_be_exhaustively_verbose is True:
                 print("Received Hamiltonian in choose flow generator with ||H|| = ", np.linalg.norm( H ) )
 
+        # flow_generator types: 'default'/'canonical', 'single_commutator', 
+        # 'double_commutator', 'presribed'; does not check invalid types
         if self.flow_generator['type'] == 'default' or self.flow_generator['type'] == 'canonical':
             if self.please_be_exhaustively_verbose is True:
                 print("Default generator computation... with ||H|| = ", np.linalg.norm( H ) )
             chosen_generator = double_bracket_flow.commutator( double_bracket_flow.delta( H ), double_bracket_flow.sigma( H )) 
-                
+
         elif self.flow_generator['type'] == 'single_commutator':
             chosen_generator = double_bracket_flow.commutator( self.flow_generator['operator'], H ) 
             
@@ -108,15 +123,23 @@ class double_bracket_flow:
         elif self.flow_generator['type'] == 'prescribed':
             chosen_generator =  self.flow_generator['operator']
 
+        elif self.flow_generator['type'] == 'magnetic_field':
+            Z = Z_class(self.L)
+            Z_ls = [Z.at(i+1) for i in range(self.L)]
+            B_field = sum([double_bracket_flow.normalized(self.flow_generator['field_vector'])[i] * Z_ls[i] for i in range (self.L)])
+            chosen_generator = double_bracket_flow.commutator( B_field, H ) 
+            
         if self.please_be_exhaustively_verbose is True:
             print("Chosen generator of type ", self.flow_generator['type'], " has norm ", np.linalg.norm( chosen_generator ) )
         return chosen_generator
 
+    # Returns V=e^sW
     def unitary_flow_step( self, s, H = None ):
         if H is None:
             H = self.H
         return  expm( s * self.choose_flow_generator( H ) )
 
+    # Returns VHV^+ (rotated hamiltonian)
     def flow_step( self, s, H = None ):
         if H is None:
             H = self.H
@@ -147,6 +170,7 @@ class double_bracket_flow:
 
             if prescribed_generators is None:
                 H = self.flow_step( s, H )
+            # Given list of prescribed ops, set flow_gen = prescribed_generator[i].
             else:
                 self.flow_generator['type'] = 'prescribed'
                 self.flow_generator['operator'] = prescribed_generators[ i ]
@@ -171,6 +195,7 @@ class double_bracket_flow:
             print( "<H> = ", expected_energy )
         return expected_energy
 
+    # Returns <H^2> - <H>^2
     def compute_expected_energy_fluctuation( self, state = None, H = None, expected_energy  = None ):
         if H is None:
             H = self.H
@@ -184,6 +209,7 @@ class double_bracket_flow:
             print( "<H^2> - <H>^2 = ", expected_energy_fluctuation )
         return expected_energy_fluctuation
     
+    # Update computational state and energy/fluc
     def compute_observables( self, state = None, H = None ):
         if state is None:
             if self.please_update_flow_unitary is True:
@@ -196,7 +222,6 @@ class double_bracket_flow:
         self.store_flow_output( expected_energy = expected_energy, expected_energy_fluctuation = expected_energy_fluctuation )
 
     def compute_observables_during_flow( self, initial_state = None ):
-
         if initial_state is None:
             self.do_not_compute_observables_during_flow()
             return 0
@@ -210,7 +235,7 @@ class double_bracket_flow:
         self.please_compute_observables = False
         self.please_update_flow_unitary = False
 
-    def find_minimizing_flow_step( self, H = None ):
+    def find_minimizing_flow_step( self, H = None ): 
         if self.please_evaluate_timing is True:
             start = time.clock()
         if H is None:
@@ -226,6 +251,7 @@ class double_bracket_flow:
         whether_to_update_flow_unitary = self.please_update_flow_unitary
         self.please_update_flow_unitary = False
 
+        # For non-binary search, go through all s-grid sequentially and find min
         if self.please_use_binary_search is False:
 
             if self.custom_flow_step_list is None:
@@ -281,9 +307,9 @@ class double_bracket_flow:
 
         if self.please_be_verbose is True:
             if self.please_evaluate_timing is True:
-                print( "Found minimum norm = ", minimal_norm_sigma_H_s, " for s = ", minimizing_flow_step, " in ", time.clock() - start, " s" )
+                print( "    Found minimum norm = ", minimal_norm_sigma_H_s, " for s = ", minimizing_flow_step, " in ", time.clock() - start, " s" )
             else:
-                print( "Found minimum norm = ", minimal_norm_sigma_H_s, " for s = ", minimizing_flow_step )
+                print( "    Found minimum norm = ", minimal_norm_sigma_H_s, " for s = ", minimizing_flow_step )
 
             
         if self.please_be_visual is True:
@@ -324,6 +350,7 @@ class double_bracket_flow:
                                                 norms_sigma_H_s = [] )
 
     def flow_forwards( self, H = None, states = None ):
+        # If H not given, continue from what we have
         if H is None:
             H = self.H
             if 'final_flowed_H' in self.flow_outputs:
@@ -339,7 +366,7 @@ class double_bracket_flow:
         self.store_flow_output( norms_flow_generator_W = np.linalg.norm( self.choose_flow_generator( H ) ) )
         
         if self.please_be_exhaustively_verbose is True:
-            print( self.flow_outputs )
+            print( self.flow_outputs ) 
 
         for i in range( self.nmb_flow_steps ):
             if self.please_be_verbose is True:
@@ -349,10 +376,11 @@ class double_bracket_flow:
             H = output_flow_step[ 'optimally_flowed_H' ]
             if self.please_be_exhaustively_verbose is True:
                 print( output_flow_step )
+            # ??? equal_floats?
             if equal_floats( output_flow_step['minimizing_flow_step'], 0 ):
                 break
 
-
+            # ??? **?
             self.store_flow_output( **output_flow_step )
             self.store_flow_output(  norms_flow_generator_W = np.linalg.norm( self.choose_flow_generator( H ) ) )
 
@@ -375,6 +403,7 @@ class double_bracket_flow:
 
     def flow_via_local_Z_sweep( self, H = None, states = None, Z = None, use_single_commutator = True ):
         if H is None:
+            # ???
             if 'final_flowed_H' in self.flow_outputs:
                 H = self.flow_outputs['final_flowed_H'][0]
                 if self.please_be_verbose is True:
@@ -449,7 +478,7 @@ class double_bracket_flow:
         
         if self.please_be_exhaustively_verbose is True:
             print( "Starting flow via selected Zs", self.flow_outputs )
-       	    print( "Flow step ", i, " using H with off-diagonal norm", np.linalg.norm( self.sigma(H) ) )      
+            print( "Flow step ", i, " using H with off-diagonal norm", np.linalg.norm( self.sigma(H) ) )      
 
         
         #Begin the iteration loop
@@ -727,7 +756,148 @@ class double_bracket_flow:
         if self.please_return_outputs is True:
             return self.flow_outputs
 
-    def flow_ini_state( ini_state, H, outputs = None ):
+    # MAGNETIC
+    def find_magnetic_gradient( self, s, H = None, B = None, dB = 0.001):
+        if H is None:
+            H = self.H
+        # Initial B field
+        if B is None:
+            B = self.flow_generator['field_vector']
+            B_original = np.copy(B).astype(float)
+        else:
+            B_original = np.copy(self.flow_generator['field_vector']).astype(float)
+            self.flow_generator['field_vector'] = B
+        derivative_B = []
+        # ||sigma(H_B0)||
+        H_B0 = self.flow_step(s, H)
+        norms_sigma_H_B0 = np.linalg.norm( double_bracket_flow.sigma( H_B0 ), self.norm_type)
+        # Find derivative for each entry
+        B0 = np.copy(B).astype(float)
+        for i in range (self.L):
+            # ||sigma(H_B1||
+            B = np.copy(B0)
+            B[i] += dB
+            self.flow_generator['field_vector'] = np.copy(B)
+            H_B1 = self.flow_step(s,H)
+            norms_sigma_H_B1 = np.linalg.norm( double_bracket_flow.sigma( H_B1 ), self.norm_type )
+            derivative_B.append((norms_sigma_H_B1 - norms_sigma_H_B0)/dB)
+        
+        self.flow_generator['field_vector'] = np.copy(B_original)
+        return double_bracket_flow.normalized(derivative_B)
+   
+    # MAGNETIC
+    def flow_via_magnetic_field_search(self, H = None, states = None, B = None, 
+   please_also_check_canonical_bracket = True, please_use_single_commutator = True):
+        if H is None:
+            if 'final_flowed_H' in self.flow_outputs:
+                H = self.flow_outputs['final_flowed_H'][0]
+            else:
+                H = self.H
+        if B is None:
+            B = double_bracket_flow.normalized(self.flow_generator['field_vector'])
+            self.flow_generator['field_vector'] = B
+        else:
+            self.flow_generator['field_vector'] = double_bracket_flow.normalized(B)
+            B = self.flow_generator['field_vector']
+        #Prepare iteration
+        self.store_initial_H_in_outputs_for_plotting( H )
+        self.store_flow_output( norms_flow_generator_W = np.linalg.norm( self.choose_flow_generator( H ) ) )
+        
+        if self.please_be_exhaustively_verbose is True:
+            print( self.flow_outputs )
+        
+        if self.custom_magnetic_step_list is None:
+                b_grid = np.linspace( self.magnetic_step_min, self.magnetic_step_max, self.nmb_search_points_magnetic_b_search )
+        else:
+            b_grid = self.custom_magnetic_step_list
+        
+        for i in range( self.nmb_flow_steps ):
+            if self.please_be_verbose is True:
+                    print( "Flow step ", i, "using H with norm", np.linalg.norm( H ) )
+            if self.please_be_exhaustively_verbose is True:
+                print( "Flow step ", i, " using H with off-diagonal norm", np.linalg.norm( self.sigma(H) ) )
+            # The first step
+            if i == 0:
+                # TODO Option for search in list, now assume first step direction B given
+                output_flow_step = self.find_minimizing_flow_step( H )
+                minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
+
+            else:      
+                # Gradient descend direction
+                B_descend = double_bracket_flow.normalized(self.find_magnetic_gradient(output_flow_step['minimizing_flow_step'],H))
+                print('Flowing with gradient', B_descend)
+                # TODO If B_descend = 0?
+                B0 = np.copy(B)
+                # Find best direction with respectivve best sigma descrease
+                norms_H_for_different_db = []
+                for db in b_grid:
+                    if self.please_be_verbose:
+                        print(' db =',db, ', B =', B - B_descend * db)
+                    new_B = double_bracket_flow.normalized(B - B_descend * db)
+                    self.flow_generator['field_vector'] = new_B
+                    output_flow_step = self.find_minimizing_flow_step( H )
+                    minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
+                    norms_H_for_different_db.append(minimal_norm_H_found)
+                    B = np.copy(B0)
+                    # TODO Store outputs?
+                    
+                # Save best direction so far
+                ind_H_min = np.argmin( norms_H_for_different_db )
+                best_B = double_bracket_flow.normalized(B - B_descend * b_grid[ind_H_min])
+                
+                if please_also_check_canonical_bracket is True:
+                    if self.please_be_verbose:
+                        self.flow_generator['type'] = 'canonical'
+                    if self.please_be_verbose:
+                        print(' Canonical')
+                    output_flow_step = self.find_minimizing_flow_step( H )
+                    minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
+
+                    if minimal_norm_H_found < min( norms_H_for_different_db ):
+                        # if self.please_be_verbose is True:
+                        #     print("Found that canonical is better because canonical",minimal_norm_H_found, ", magnetic", min( norms_H_for_different_db) )
+                        canonical_bracket_better = True
+                    else:
+                        # if self.please_be_verbose is True:
+                        #     print("Found that canonical is worse, because canonical",minimal_norm_H_found , ", magnetic", min( norms_H_for_different_db) )
+                        canonical_bracket_better = False
+                    norms_H_for_different_db.append( minimal_norm_H_found )
+                else:
+                    canonical_bracket_better = False    
+                
+                if canonical_bracket_better is False:
+                    #Find which direction is best
+                    ind_H_min = np.argmin( norms_H_for_different_db )
+                    
+                    # TODO store?
+                    
+                    #Recompute the flow for the best direction
+                    self.flow_generator['type'] = 'magnetic_field'
+                    self.flow_generator['field_vector'] = B - B_descend * b_grid[ind_H_min]
+                else:
+                    #Store which direction is best
+                    self.store_flow_output( strs_of_minimizer_Z = 'Canonical' )
+                    #Recompute the flow for the best direction
+                    self.flow_generator['type'] = 'canonical'
+                if self.please_be_verbose:
+                    print(" Recalculate with best", 'canonical' if canonical_bracket_better else 'magnetic field')
+                output_flow_step = self.find_minimizing_flow_step( H )
+                if self.please_be_verbose is True:
+                    if canonical_bracket_better:
+                        print('For step', i, ', the minimum norm found', minimal_norm_H_found, 'with canonical, step size s = ', output_flow_step['minimizing_flow_step'])
+                    else:
+                        print('For step', i, ', the minimum norm found', min( norms_H_for_different_db ), 'with magnetic field B = ', self.flow_generator['field_vector'], 'step size s = ', output_flow_step['minimizing_flow_step'])
+                    
+                H = output_flow_step[ 'optimally_flowed_H' ]
+                # Get back to magnetic search if canonical was better
+                self.flow_generator['type'] = 'magnetic_field'
+                self.flow_generator['field_vector'] = best_B
+                
+                
+            # TODO store values and exhaustively verbose
+
+
+    def flow_ini_state( self, ini_state, H, outputs = None ):
         
         if self.store_a_lot is not None:
             psis_flow = [ini_state]
