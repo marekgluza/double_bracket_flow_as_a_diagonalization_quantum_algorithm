@@ -799,6 +799,7 @@ class double_bracket_flow:
         else:
             self.flow_generator['field_vector'] = double_bracket_flow.normalized(B)
             B = self.flow_generator['field_vector']
+            
         #Prepare iteration
         self.store_initial_H_in_outputs_for_plotting( H )
         self.store_flow_output( norms_flow_generator_W = np.linalg.norm( self.choose_flow_generator( H ) ) )
@@ -811,12 +812,14 @@ class double_bracket_flow:
         else:
             b_grid = self.custom_magnetic_step_list
         
-        for i in range( self.nmb_flow_steps ):
+        for i in range( self.nmb_flow_steps + 1 ):
             if self.please_be_verbose is True:
                     print( "Flow step ", i, "using H with norm", np.linalg.norm( H ) )
             if self.please_be_exhaustively_verbose is True:
                 print( "Flow step ", i, " using H with off-diagonal norm", np.linalg.norm( self.sigma(H) ) )
-            # The first step
+            norms_H_for_different_db = []
+            searched_B_directions = []
+                # The first step
             if i == 0:
                 # TODO Option for search in list, now assume first step direction B given
                 output_flow_step = self.find_minimizing_flow_step( H )
@@ -829,22 +832,24 @@ class double_bracket_flow:
                 # TODO If B_descend = 0?
                 B0 = np.copy(B)
                 # Find best direction with respectivve best sigma descrease
-                norms_H_for_different_db = []
+                
                 for db in b_grid:
                     if self.please_be_verbose:
                         print(' db =',db, ', B =', B - B_descend * db)
                     new_B = double_bracket_flow.normalized(B - B_descend * db)
+                    searched_B_directions.append(new_B)
                     self.flow_generator['field_vector'] = new_B
                     output_flow_step = self.find_minimizing_flow_step( H )
                     minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
                     norms_H_for_different_db.append(minimal_norm_H_found)
                     B = np.copy(B0)
-                    # TODO Store outputs?
+                
+                self.store_flow_output( searched_B_directions = searched_B_directions)   
+                self.store_flow_output( norms_H_for_different_db = norms_H_for_different_db)
                     
                 # Save best direction so far
                 ind_H_min = np.argmin( norms_H_for_different_db )
                 best_B = double_bracket_flow.normalized(B - B_descend * b_grid[ind_H_min])
-                
                 if please_also_check_canonical_bracket is True:
                     if self.please_be_verbose:
                         self.flow_generator['type'] = 'canonical'
@@ -868,33 +873,35 @@ class double_bracket_flow:
                 if canonical_bracket_better is False:
                     #Find which direction is best
                     ind_H_min = np.argmin( norms_H_for_different_db )
-                    
-                    # TODO store?
+                    self.store_flow_output( list_of_minimizer_B = self.flow_outputs['searched_B_directions'][0][ind_H_min])
                     
                     #Recompute the flow for the best direction
                     self.flow_generator['type'] = 'magnetic_field'
-                    self.flow_generator['field_vector'] = B - B_descend * b_grid[ind_H_min]
+                    self.flow_generator['field_vector'] = self.flow_outputs['searched_B_directions'][0][ind_H_min]
                 else:
                     #Store which direction is best
-                    self.store_flow_output( strs_of_minimizer_Z = 'Canonical' )
+                    self.store_flow_output( list_of_minimizer_B = 'Canonical' )
                     #Recompute the flow for the best direction
                     self.flow_generator['type'] = 'canonical'
                 if self.please_be_verbose:
                     print(" Recalculate with best", 'canonical' if canonical_bracket_better else 'magnetic field')
+                
                 output_flow_step = self.find_minimizing_flow_step( H )
+                H = output_flow_step[ 'optimally_flowed_H' ]
+                self.store_flow_output( **output_flow_step)
+                self.store_flow_output( norms_flow_generator_W = np.linalg.norm(self.choose_flow_generator(H)))
+                
                 if self.please_be_verbose is True:
                     if canonical_bracket_better:
                         print('For step', i, ', the minimum norm found', minimal_norm_H_found, 'with canonical, step size s = ', output_flow_step['minimizing_flow_step'])
                     else:
                         print('For step', i, ', the minimum norm found', min( norms_H_for_different_db ), 'with magnetic field B = ', self.flow_generator['field_vector'], 'step size s = ', output_flow_step['minimizing_flow_step'])
                     
-                H = output_flow_step[ 'optimally_flowed_H' ]
                 # Get back to magnetic search if canonical was better
                 self.flow_generator['type'] = 'magnetic_field'
                 self.flow_generator['field_vector'] = best_B
                 
-                
-            # TODO store values and exhaustively verbose
+            
 
 
     def flow_ini_state( self, ini_state, H, outputs = None ):
