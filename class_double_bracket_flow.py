@@ -256,9 +256,10 @@ class double_bracket_flow:
 
             if self.custom_flow_step_list is None:
                 s_grid = np.linspace( self.flow_step_min, self.flow_step_max, self.nmb_search_points_minimizing_s_search )
+                # print('s_grid', s_grid)
             else:
                 s_grid = self.custom_flow_step_list
-
+            
             for s in s_grid:       
                 if self.please_be_exhaustively_verbose is True:
                     print("Searching for minimizing flow step using s = ", s, " and flow generator type ", self.flow_generator['type'] )
@@ -756,7 +757,6 @@ class double_bracket_flow:
         if self.please_return_outputs is True:
             return self.flow_outputs
 
-    # MAGNETIC
     def find_magnetic_gradient( self, s, H = None, B = None, dB = 0.001):
         if H is None:
             H = self.H
@@ -785,7 +785,6 @@ class double_bracket_flow:
         self.flow_generator['field_vector'] = np.copy(B_original)
         return double_bracket_flow.normalized(derivative_B)
    
-    # MAGNETIC
     def flow_via_magnetic_field_search(self, H = None, states = None, B = None, 
    please_also_check_canonical_bracket = True, please_use_single_commutator = True):
         if H is None:
@@ -886,6 +885,7 @@ class double_bracket_flow:
                 if self.please_be_verbose:
                     print(" Recalculate with best", 'canonical' if canonical_bracket_better else 'magnetic field')
                 
+                # Recalculate
                 output_flow_step = self.find_minimizing_flow_step( H )
                 H = output_flow_step[ 'optimally_flowed_H' ]
                 self.store_flow_output( **output_flow_step)
@@ -900,9 +900,10 @@ class double_bracket_flow:
                 # Get back to magnetic search if canonical was better
                 self.flow_generator['type'] = 'magnetic_field'
                 self.flow_generator['field_vector'] = best_B
-                
-            
-
+        self.store_flow_output( final_flowed_H = H )
+        
+        if self.please_return_outputs is True:
+            return self.flow_outputs
 
     def flow_ini_state( self, ini_state, H, outputs = None ):
         
@@ -1019,8 +1020,7 @@ class double_bracket_flow:
 
 #plot data
         norms = flow_results['minimal_norm_sigma_H_s']
-        x_axis = [sum(flow_results['minimizing_flow_step'][:k])for k in range( 1, len(flow_results['minimizing_flow_step'])+1)]
-
+        x_axis = [sum(flow_results['minimizing_flow_step'][:k]) for k in range( 1, len(flow_results['minimizing_flow_step'])+1)]
 #plot
         plt.plot( x_axis, norms, '-o')   
 
@@ -1510,3 +1510,5 @@ class double_bracket_flow:
         plt.savefig( save_path, format='pdf')
         plt.show()
 
+    def initialize_flow_results(self):
+        self.flow_outputs = {}
