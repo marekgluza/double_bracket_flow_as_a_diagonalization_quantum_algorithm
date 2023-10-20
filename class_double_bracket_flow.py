@@ -10,8 +10,8 @@ from math import isclose as equal_floats
 class double_bracket_flow:
     def __init__( self, 
                     H, 
-                    ## MAGNETIC: added attribute 'field_vector' for B, operator be set as B.dot(Z)
-                    flow_generator = { 'type' : 'default', 'operator' : None , 'field_vector': None},
+                    ## MAGNETIC: added attribute 'onsite_Z_coupling' for B, operator be set as B.dot(Z)
+                    flow_generator = { 'type' : 'default', 'operator' : None , 'onsite_Z_coupling': None},
                     norm_type =  None,
                     flow_step_min = 0,
                     flow_step_max = 0.05,
@@ -125,8 +125,8 @@ class double_bracket_flow:
 
         elif self.flow_generator['type'] == 'magnetic_field':
             Z = Z_class(self.L)
-            Z_ls = [Z.at(i+1) for i in range(self.L)]
-            B_field = sum([double_bracket_flow.normalized(self.flow_generator['field_vector'])[i] * Z_ls[i] for i in range (self.L)])
+            Z_list = [Z.at(i+1) for i in range(self.L)]
+            B_field = sum([double_bracket_flow.normalized(self.flow_generator['onsite_Z_coupling'])[i] * Z_list[i] for i in range (self.L)])
             chosen_generator = double_bracket_flow.commutator( B_field, H ) 
             
         if self.please_be_exhaustively_verbose is True:
@@ -757,16 +757,16 @@ class double_bracket_flow:
         if self.please_return_outputs is True:
             return self.flow_outputs
 
-    def find_magnetic_gradient( self, s, H = None, B = None, dB = 0.001):
+    def find_onsite_Z_coupling_gradient( self, s, H = None, B = None, dB = 0.001):
         if H is None:
             H = self.H
         # Initial B field
         if B is None:
-            B = self.flow_generator['field_vector']
+            B = self.flow_generator['onsite_Z_coupling']
             B_original = np.copy(B).astype(float)
         else:
-            B_original = np.copy(self.flow_generator['field_vector']).astype(float)
-            self.flow_generator['field_vector'] = B
+            B_original = np.copy(self.flow_generator['onsite_Z_coupling']).astype(float)
+            self.flow_generator['onsite_Z_coupling'] = B
         derivative_B = []
         # ||sigma(H_B0)||
         H_B0 = self.flow_step(s, H)
@@ -777,15 +777,15 @@ class double_bracket_flow:
             # ||sigma(H_B1||
             B = np.copy(B0)
             B[i] += dB
-            self.flow_generator['field_vector'] = np.copy(B)
+            self.flow_generator['onsite_Z_coupling'] = np.copy(B)
             H_B1 = self.flow_step(s,H)
             norms_sigma_H_B1 = np.linalg.norm( double_bracket_flow.sigma( H_B1 ), self.norm_type )
             derivative_B.append((norms_sigma_H_B1 - norms_sigma_H_B0)/dB)
         
-        self.flow_generator['field_vector'] = np.copy(B_original)
+        self.flow_generator['onsite_Z_coupling'] = np.copy(B_original)
         return double_bracket_flow.normalized(derivative_B)
    
-    def flow_via_magnetic_field_search(self, H = None, states = None, B = None, 
+    def flow_via_onsite_Z_potential_search(self, H = None, states = None, B = None, 
    please_also_check_canonical_bracket = True, please_use_single_commutator = True):
         if H is None:
             if 'final_flowed_H' in self.flow_outputs:
@@ -793,11 +793,11 @@ class double_bracket_flow:
             else:
                 H = self.H
         if B is None:
-            B = double_bracket_flow.normalized(self.flow_generator['field_vector'])
-            self.flow_generator['field_vector'] = B
+            B = double_bracket_flow.normalized(self.flow_generator['onsite_Z_coupling'])
+            self.flow_generator['onsite_Z_coupling'] = B
         else:
-            self.flow_generator['field_vector'] = double_bracket_flow.normalized(B)
-            B = self.flow_generator['field_vector']
+            self.flow_generator['onsite_Z_coupling'] = double_bracket_flow.normalized(B)
+            B = self.flow_generator['onsite_Z_coupling']
             
         #Prepare iteration
         self.store_initial_H_in_outputs_for_plotting( H )
@@ -826,7 +826,7 @@ class double_bracket_flow:
 
             else:      
                 # Gradient descend direction
-                B_descend = double_bracket_flow.normalized(self.find_magnetic_gradient(output_flow_step['minimizing_flow_step'],H))
+                B_descend = double_bracket_flow.normalized(self.find_onsite_Z_coupling_gradient(output_flow_step['minimizing_flow_step'],H))
                 print('Flowing with gradient', B_descend)
                 # TODO If B_descend = 0?
                 B0 = np.copy(B)
@@ -837,7 +837,7 @@ class double_bracket_flow:
                         print(' db =',db, ', B =', B - B_descend * db)
                     new_B = double_bracket_flow.normalized(B - B_descend * db)
                     searched_B_directions.append(new_B)
-                    self.flow_generator['field_vector'] = new_B
+                    self.flow_generator['onsite_Z_coupling'] = new_B
                     output_flow_step = self.find_minimizing_flow_step( H )
                     minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
                     norms_H_for_different_db.append(minimal_norm_H_found)
@@ -876,7 +876,7 @@ class double_bracket_flow:
                     
                     #Recompute the flow for the best direction
                     self.flow_generator['type'] = 'magnetic_field'
-                    self.flow_generator['field_vector'] = self.flow_outputs['searched_B_directions'][0][ind_H_min]
+                    self.flow_generator['onsite_Z_coupling'] = self.flow_outputs['searched_B_directions'][0][ind_H_min]
                 else:
                     #Store which direction is best
                     self.store_flow_output( list_of_minimizer_B = 'Canonical' )
@@ -895,11 +895,11 @@ class double_bracket_flow:
                     if canonical_bracket_better:
                         print('For step', i, ', the minimum norm found', minimal_norm_H_found, 'with canonical, step size s = ', output_flow_step['minimizing_flow_step'])
                     else:
-                        print('For step', i, ', the minimum norm found', min( norms_H_for_different_db ), 'with magnetic field B = ', self.flow_generator['field_vector'], 'step size s = ', output_flow_step['minimizing_flow_step'])
+                        print('For step', i, ', the minimum norm found', min( norms_H_for_different_db ), 'with magnetic field B = ', self.flow_generator['onsite_Z_coupling'], 'step size s = ', output_flow_step['minimizing_flow_step'])
                     
                 # Get back to magnetic search if canonical was better
                 self.flow_generator['type'] = 'magnetic_field'
-                self.flow_generator['field_vector'] = best_B
+                self.flow_generator['onsite_Z_coupling'] = best_B
         self.store_flow_output( final_flowed_H = H )
         
         if self.please_return_outputs is True:
