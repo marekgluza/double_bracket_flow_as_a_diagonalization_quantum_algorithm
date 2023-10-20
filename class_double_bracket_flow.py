@@ -377,11 +377,9 @@ class double_bracket_flow:
             H = output_flow_step[ 'optimally_flowed_H' ]
             if self.please_be_exhaustively_verbose is True:
                 print( output_flow_step )
-            # ??? equal_floats?
             if equal_floats( output_flow_step['minimizing_flow_step'], 0 ):
                 break
 
-            # ??? **?
             self.store_flow_output( **output_flow_step )
             self.store_flow_output(  norms_flow_generator_W = np.linalg.norm( self.choose_flow_generator( H ) ) )
 
@@ -404,7 +402,6 @@ class double_bracket_flow:
 
     def flow_via_local_Z_sweep( self, H = None, states = None, Z = None, use_single_commutator = True ):
         if H is None:
-            # ???
             if 'final_flowed_H' in self.flow_outputs:
                 H = self.flow_outputs['final_flowed_H'][0]
                 if self.please_be_verbose is True:
