@@ -34,8 +34,6 @@ class Pauli_algebra:
             product = np.linalg.multi_dot(ops)
             basis_op_dict[index] = product
         return basis_op_dict
-
-
         
     def Pauli_decomposition(self, H, non_zero=True):
         decomp = dict()
