@@ -824,14 +824,16 @@ class double_bracket_flow:
             else:      
                 # Gradient descend direction
                 B_descend = double_bracket_flow.normalized(self.find_onsite_Z_coupling_gradient(output_flow_step['minimizing_flow_step'],H))
-                print('Flowing with gradient', B_descend)
+                # print('Flowing with gradient', B_descend)
                 # TODO If B_descend = 0?
                 B0 = np.copy(B)
                 # Find best direction with respectivve best sigma descrease
-                
+                verbose = self.please_be_verbose
                 for db in b_grid:
-                    if self.please_be_verbose:
+                    if self.please_be_exhaustively_verbose:
                         print(' db =',db, ', B =', B - B_descend * db)
+                    else:
+                        self.please_be_verbose = False
                     new_B = double_bracket_flow.normalized(B - B_descend * db)
                     searched_B_directions.append(new_B)
                     self.flow_generator['onsite_Z_coupling'] = new_B
@@ -839,6 +841,7 @@ class double_bracket_flow:
                     minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
                     norms_H_for_different_db.append(minimal_norm_H_found)
                     B = np.copy(B0)
+                self.please_be_verbose = verbose
                 
                 self.store_flow_output( searched_B_directions = searched_B_directions)   
                 self.store_flow_output( norms_H_for_different_db = norms_H_for_different_db)
@@ -849,10 +852,13 @@ class double_bracket_flow:
                 if please_also_check_canonical_bracket is True:
                     if self.please_be_verbose:
                         self.flow_generator['type'] = 'canonical'
-                    if self.please_be_verbose:
+                    if self.please_be_exhaustively_verbose:
                         print(' Canonical')
+                    else:
+                        self.please_be_verbose = False
                     output_flow_step = self.find_minimizing_flow_step( H )
                     minimal_norm_H_found = output_flow_step['minimal_norm_sigma_H_s']
+                    self.please_be_verbose = verbose
 
                     if minimal_norm_H_found < min( norms_H_for_different_db ):
                         # if self.please_be_verbose is True:
@@ -879,11 +885,14 @@ class double_bracket_flow:
                     self.store_flow_output( list_of_minimizer_B = 'Canonical' )
                     #Recompute the flow for the best direction
                     self.flow_generator['type'] = 'canonical'
-                if self.please_be_verbose:
+                if self.please_be_exhaustively_verbose:
                     print(" Recalculate with best", 'canonical' if canonical_bracket_better else 'magnetic field')
                 
                 # Recalculate
+                if self.please_be_exhaustively_verbose == False:
+                    self.please_be_verbose = False
                 output_flow_step = self.find_minimizing_flow_step( H )
+                self.please_be_verbose = verbose
                 H = output_flow_step[ 'optimally_flowed_H' ]
                 self.store_flow_output( **output_flow_step)
                 self.store_flow_output( norms_flow_generator_W = np.linalg.norm(self.choose_flow_generator(H)))
