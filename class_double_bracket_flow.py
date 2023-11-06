@@ -137,6 +137,8 @@ class double_bracket_flow:
     def unitary_flow_step( self, s, H = None ):
         if H is None:
             H = self.H
+        ## TODO: please_use_group_commutator
+        ## TODO: please_use_imperfect_group_commutator['strategy']
         return  expm( s * self.choose_flow_generator( H ) )
 
     # Returns VHV^+ (rotated hamiltonian)
