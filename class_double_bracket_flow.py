@@ -21,13 +21,9 @@ class double_bracket_flow:
                     nmb_search_points_magnetic_b_search = 5,
                     nmb_flow_steps = 1,
                     custom_flow_step_list = None,
-                    inverter = None,
-                    trotter_steps = 5,
                     custom_magnetic_step_list = None,
                     please_use_binary_search = False, 
                     please_compute_flow_generator_norm = False,
-                    please_use_group_commutator = False,
-                    please_use_imperfect_group_commutator = False,
                     please_store_prescribed_generators = False,
                     please_be_verbose = False,
                     please_be_exhaustively_verbose = False,
@@ -38,8 +34,6 @@ class double_bracket_flow:
 
         self.flow_generator = flow_generator
         self.norm_type =  norm_type
-        self.inverter = inverter
-        self.trotter_steps = trotter_steps
         
         self.nmb_flow_steps = nmb_flow_steps
 
@@ -52,8 +46,6 @@ class double_bracket_flow:
         self.nmb_search_points_magnetic_b_search = nmb_search_points_magnetic_b_search
 
         self.please_use_binary_search = please_use_binary_search
-        self.please_use_group_commutator = please_use_group_commutator
-        self.please_use_imperfect_group_commutator = please_use_imperfect_group_commutator
         self.custom_flow_step_list = custom_flow_step_list
         self.custom_magnetic_step_list = custom_magnetic_step_list
         self.please_store_prescribed_flow_generators = please_store_prescribed_generators
@@ -67,7 +59,6 @@ class double_bracket_flow:
         self.please_be_visual = please_be_visual
         self.please_be_exhaustively_visual = please_be_exhaustively_visual
         self.please_evaluate_timing = False
-
         #It is not needed to initialize but just to summarize some naming conventions
         self.flow_outputs = {
         'flow_generator_type' : 'default',
@@ -106,25 +97,6 @@ class double_bracket_flow:
     def sigma( A ):
         return A - double_bracket_flow.delta( A )
 
-    def imperfect_inversion_evolution(self, t, N, H=None, H_inverter=None):
-        # Returns approximated e^itH with trotterization
-        if H is None:
-            H = self.H
-        if H_inverter is None:
-            H_inverter = self.inverter
-        H_imp_inv = H_inverter @ H @ H_inverter
-        missing_term = H_imp_inv + H
-        s = t/N
-        return np.linalg.matrix_power(((H_inverter @ expm(-1j*s*H) @ H_inverter) @ expm(1j* s *missing_term)), N)
-    
-    def convergence(self, t, N, H=None, H_inverter=None):
-        if H is None:
-            H = self.H
-        if H_inverter is None:
-            H_inverter = self.inverter
-        target = expm(-1j*t*H) @ self.imperfect_inversion_evolution(t, N, H, H_inverter)
-        return np.abs(target.trace()/np.sqrt(np.size(H)))
-
     def choose_flow_generator( self, H = None ):
         # Check if H has been passed, if not, use self.H
         if H is None:
@@ -162,20 +134,9 @@ class double_bracket_flow:
         return chosen_generator
 
     # Returns V=e^sW
-    def unitary_flow_step( self, s, H = None, H_inverter = None, N = None):
+    def unitary_flow_step( self, s, H = None ):
         if H is None:
             H = self.H
-        if H_inverter is None:
-            H_inverter = self.inverter
-        if N is None:
-            N = self.trotter_steps
-        sqrt_s = np.sqrt(s)
-        D = self.choose_flow_generator( H )
-        if self.please_use_group_commutator:
-            return expm(-1j*sqrt_s*D) @ expm(-1j*sqrt_s*H) @ expm(1j*sqrt_s*D) @ expm(1j*sqrt_s*H)
-        elif self.please_use_imperfect_group_commutator:
-            invert_evolution = self.imperfect_inversion_evolution(sqrt_s, N, H, H_inverter)
-            return expm(-1j*sqrt_s*D) @ expm(-1j*sqrt_s*H) @ expm(1j*sqrt_s*D) @ invert_evolution
         return  expm( s * self.choose_flow_generator( H ) )
 
     # Returns VHV^+ (rotated hamiltonian)
@@ -1113,7 +1074,7 @@ class double_bracket_flow:
                      xycoords='axes fraction')
 
         #inset the last Hamiltonian
-        plt.imshow(flow_results['final_flowed_H'][-1].real, cmap='RdBu')
+        plt.imshow(flow_results['final_flowed_H'][-1], cmap='RdBu')
 
         plt.colorbar()
         if save_path is None:
@@ -1121,7 +1082,6 @@ class double_bracket_flow:
         if please_save_the_fig is True:
             plt.savefig( save_path, format='pdf')
         plt.show()
-        
     def show_flow_forwards_results_fancy( self, flow_results = None, save_path = None ):
         if flow_results is None:
             flow_results = self.flow_outputs
