@@ -59,6 +59,8 @@ class double_bracket_flow:
         self.please_be_visual = please_be_visual
         self.please_be_exhaustively_visual = please_be_exhaustively_visual
         self.please_evaluate_timing = False
+        self.please_use_group_commutator = False
+        self.please_use_imperfect_group_commutator = False
         #It is not needed to initialize but just to summarize some naming conventions
         self.flow_outputs = {
         'flow_generator_type' : 'default',
@@ -139,6 +141,11 @@ class double_bracket_flow:
             H = self.H
         ## TODO: please_use_group_commutator
         ## TODO: please_use_imperfect_group_commutator['strategy']
+        if self.please_use_group_commutator:
+            sqrt_s = np.sqrt(s)
+            D = self.choose_flow_generator( H )
+            return expm(1j*sqrt_s*D) @ expm(1j*sqrt_s*H) @ expm(-1j*sqrt_s*D) @ expm(-1j*sqrt_s*H)
+            
         return  expm( s * self.choose_flow_generator( H ) )
 
     # Returns VHV^+ (rotated hamiltonian)
