@@ -200,7 +200,7 @@ class double_bracket_flow:
         if self.please_be_verbose is True:
             print("In redo flow reseting the flow unitary" )
         self.please_update_flow_unitary = True
-        self.flow_unitary_V = np.eye( 2**self.L )
+        self.flow_unitary_V = np.eye( self.H.shape[0] )
         observables = []
         for i, s in enumerate(s_list):
 
@@ -241,7 +241,7 @@ class double_bracket_flow:
 
         if expected_energy is None:
             expected_energy = self.compute_expected_energy( state, H )
-        energy_fluctuation = H.dot( H ) - expected_energy**2 * np.eye(2**self.L)  
+        energy_fluctuation = H.dot( H ) - expected_energy**2 * np.eye(H.shape[0])  
 
         expected_energy_fluctuation = self.compute_expected_value( state, energy_fluctuation )
         if self.please_be_exhaustively_verbose is True:
@@ -265,7 +265,7 @@ class double_bracket_flow:
             self.do_not_compute_observables_during_flow()
             return 0
         self.state = initial_state
-        self.flow_unitary_V = np.eye( 2**self.L )
+        self.flow_unitary_V = np.eye( H.shape[0] )
         self.please_compute_observables = True
         self.please_update_flow_unitary = True
 
@@ -564,7 +564,7 @@ class double_bracket_flow:
             other_Z_ops.append( self.delta( H ) )
             other_Z_ops_names.append( 'Diagonal_H' )
             
-            switch_odd = np.eye(2**self.L)
+            switch_odd = np.eye(self.H.shape[0])
             #Works only in odd dimensions....
             if self.please_be_exhaustively_verbose is True:
                 print([ x for x in range(0,self.L+1,2) ])
@@ -576,7 +576,7 @@ class double_bracket_flow:
             other_Z_ops.append( switch_odd )
             other_Z_ops_names.append( 'switch_odd' )
 
-            switch_even = np.eye(2**self.L)
+            switch_even = np.eye(self.H.shape[0])
             for x in range(1,self.L,2):
                 switch_even = switch_even.dot( Z.at(x) )
             other_Z_ops.append( switch_even )
@@ -957,7 +957,7 @@ class double_bracket_flow:
         energy = []
         energy_fluct = []
         norms = []
-        V = np.eye(2**self.L) 
+        V = np.eye(self.H.shape[0]) 
         self.flow_generator = {}
         self.flow_generator['type'] = 'single_double_bracket_flow.commutator'
         observables = []
@@ -1019,7 +1019,7 @@ class double_bracket_flow:
         if show_subset is not None:
             k_range = show_subset
         else:
-            k_range = range( 2**L )
+            k_range = range( self.H.shape[0] )
         for k in k_range:
             obs = self.observable_over_steps( k, flow_results[ observable_name ] )
             plt.plot( obs )
@@ -1179,10 +1179,10 @@ class double_bracket_flow:
         div_ax = divider1.append_axes("right", size="10%", pad=0.05)
         cbar1 = plt.colorbar(inset1, cax = div_ax )
         
-        axin1.set_yticks(range(2**L))  
-        axin1.set_xticklabels([1]+['']*(2**L-2)+[2**L])
-        axin1.set_yticklabels([1]+['']*(2**L-2)+[2**L])
-        axin1.set_xticks(range(2**L))
+        axin1.set_yticks(range(self.H.shape[0]))  
+        axin1.set_xticklabels([1]+['']*(self.H.shape[0]-2)+[self.H.shape[0]])
+        axin1.set_yticklabels([1]+['']*(self.H.shape[0]-2)+[self.H.shape[0]])
+        axin1.set_xticks(range(self.H.shape[0]))
         ax_a.annotate(' ',
                 xy=(x_axis[0], norms[0]),  
                 xytext=(0.085, 0.39),    
@@ -1206,10 +1206,10 @@ class double_bracket_flow:
             horizontalalignment='left',
             verticalalignment='bottom')
 
-        axin2.set_yticks(range(2**L))  
-        axin2.set_xticklabels([1]+['']*(2**L-2)+[2**L])
-        axin2.set_yticklabels([1]+['']*(2**L-2)+[2**L])
-        axin2.set_xticks(range(2**L))
+        axin2.set_yticks(range(self.H.shape[0]))  
+        axin2.set_xticklabels([1]+['']*(self.H.shape[0]-2)+[self.H.shape[0]])
+        axin2.set_yticklabels([1]+['']*(self.H.shape[0]-2)+[self.H.shape[0]])
+        axin2.set_xticks(range(self.H.shape[0]))
 #b
         f.add_subplot(1,3,2)
         plt.annotate('b)', xy = (a,b), xycoords='axes fraction')
@@ -1258,8 +1258,8 @@ class double_bracket_flow:
         plt.show()
     
     def get_index_and_step( self, index_stream ): 
-        nmb_step = int( np.floor( index_stream ) / 2**self.L ) 
-        index_eigenstate = int( index_stream - nmb_step * 2**self.L )
+        nmb_step = int( np.floor( index_stream ) / self.H.shape[0] ) 
+        index_eigenstate = int( index_stream - nmb_step * self.H.shape[0] )
         return index_eigenstate, nmb_step
 
     def reshape_observables( self, observable ):
@@ -1274,8 +1274,8 @@ class double_bracket_flow:
     def find_the_best_eigenstate( self, H ):
         e,U = np.linalg.eigh(H_n) 
         ind = np.argmax(abs(U))
-        ind_x = int( ind/ 2**self.L)
-        ind_y  = ind - ind_x * 2**self.L
+        ind_x = int( ind/ self.H.shape[0])
+        ind_y  = ind - ind_x * self.H.shape[0]
         return [ ind_x, ind_y ]
     
     
@@ -1358,7 +1358,7 @@ class double_bracket_flow:
         
         Scatter_list = []
         if selection is None:
-            selection = range(2**self.L)
+            selection = range(self.H.shape[0])
 
         for i, k in enumerate(selection):
             
